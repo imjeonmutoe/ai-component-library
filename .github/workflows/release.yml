@@ -34,7 +34,7 @@ jobs:
         run: pnpm --filter @imjeonmutoe/ai-components build
 
       - name: Publish to npm
-        working-directory: packages/ai-components
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" >> $HOME/.npmrc
+          cd packages/ai-components
+          npm publish --access public
