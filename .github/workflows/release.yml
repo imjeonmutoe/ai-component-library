@@ -28,14 +28,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: pnpm --filter @ai-lib/components test
+        run: pnpm --filter @imjeonmutoe/ai-components test
 
       - name: Build library
-        run: pnpm --filter @ai-lib/components build
+        run: pnpm --filter @imjeonmutoe/ai-components build
 
       - name: Publish to npm
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-          pnpm --filter @ai-lib/components publish --no-git-checks --access public
+          pnpm --filter @imjeonmutoe/ai-components publish --no-git-checks --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -28,13 +28,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Type check (library)
-        run: pnpm --filter @ai-lib/components exec tsc --noEmit
+        run: pnpm --filter @imjeonmutoe/ai-components exec tsc --noEmit
 
       - name: Run tests
-        run: pnpm --filter @ai-lib/components test
+        run: pnpm --filter @imjeonmutoe/ai-components test
 
       - name: Build library
-        run: pnpm --filter @ai-lib/components build
+        run: pnpm --filter @imjeonmutoe/ai-components build
 
       - name: Type check (demo)
         run: pnpm --filter demo exec tsc --noEmit

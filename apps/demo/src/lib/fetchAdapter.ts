@@ -1,4 +1,4 @@
-import type { AIAdapter, AIMessage } from '@ai-lib/components';
+import type { AIAdapter, AIMessage } from '@imjeonmutoe/ai-components';
 
 interface FetchAdapterOptions {
   url?: string;

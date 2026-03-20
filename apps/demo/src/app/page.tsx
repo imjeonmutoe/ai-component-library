@@ -1,6 +1,6 @@
 'use client';
 
-import { AIChat } from '@ai-lib/components';
+import { AIChat } from '@imjeonmutoe/ai-components';
 import { createFetchAdapter } from '@/lib/fetchAdapter';
 import { useMemo } from 'react';
 

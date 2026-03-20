@@ -35,7 +35,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Storybook
-        run: pnpm --filter @ai-lib/components storybook:build
+        run: pnpm --filter @imjeonmutoe/ai-components storybook:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

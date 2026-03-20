@@ -23,7 +23,7 @@ importers:
 
   apps/demo:
     dependencies:
-      '@ai-lib/components':
+      '@imjeonmutoe/ai-components':
         specifier: workspace:*
         version: link:../../packages/ai-components
       next:
