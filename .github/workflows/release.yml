@@ -36,6 +36,6 @@ jobs:
       - name: Publish to npm
         run: |
           echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
-          pnpm --filter @ai-lib/components publish --no-git-checks
+          pnpm --filter @ai-lib/components publish --no-git-checks --access public
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
