@@ -1,159 +1,104 @@
-# Turborepo starter
+# @imjeonmutoe/ai-components
 
-This Turborepo starter is maintained by the Turborepo core team.
+AI 스트리밍 응답을 위한 React 컴포넌트 라이브러리.
+SSE(Server-Sent Events) 기반의 실시간 스트리밍 UI를 어댑터 패턴으로 추상화합니다.
 
-## Using this example
+## 특징
 
-Run the following command:
+- **어댑터 패턴** — Anthropic, OpenAI 등 어떤 AI API도 `AIAdapter` 인터페이스만 구현하면 연결 가능
+- **실시간 스트리밍** — SSE 청크를 받아 타이핑 애니메이션으로 표시
+- **프로덕션 레디** — timeout, retry, unmount abort, ARIA 접근성 내장
+- **메시지 가상화** — `@tanstack/react-virtual` 기반, 수천 개 메시지도 일정한 성능
+- **듀얼 빌드** — ESM / CJS 동시 지원
 
-```sh
-npx create-turbo@latest
+## 설치
+
+```bash
+npm install @imjeonmutoe/ai-components
 ```
 
-## What's inside?
+## 빠른 시작
 
-This Turborepo includes the following packages/apps:
+```tsx
+import { AIChat } from '@imjeonmutoe/ai-components';
+import '@imjeonmutoe/ai-components/dist/index.css'; // Tailwind 스타일 (선택)
 
-### Apps and Packages
+// 1. AIAdapter 구현
+const myAdapter = {
+  async *stream(messages) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const text = decoder.decode(value);
+      // data: {"chunk":"..."} 형식 파싱
+      for (const line of text.split('\n')) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') return;
+          yield JSON.parse(data).chunk;
+        }
+      }
+    }
+  },
+  abort() { /* AbortController.abort() */ },
+};
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+// 2. 컴포넌트에 전달
+export default function App() {
+  return <AIChat adapter={myAdapter} title="AI 어시스턴트" />;
+}
 ```
 
-Without global `turbo`, use your package manager:
+## 패키지 구조
 
-```sh
-cd my-turborepo
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```
+ai-component-library/
+├── packages/
+│   ├── ai-components/        # 핵심 라이브러리 (npm 배포)
+│   └── tailwind-config/      # Tailwind 설정 공유
+├── apps/
+│   ├── demo/                 # Next.js 15 데모앱
+│   └── api/                  # FastAPI SSE 스트리밍 서버
+└── docs/                     # 프로젝트 문서
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+## 주요 명령어
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo build --filter=docs
+```bash
+pnpm dev            # 전체 개발 서버
+pnpm test           # Vitest 전체 실행
+pnpm storybook      # Storybook 실행
+pnpm build          # 전체 빌드
+pnpm type-check     # 타입 검사
 ```
 
-Without global `turbo`:
+## 문서
 
-```sh
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+- [아키텍처 개요](./docs/architecture.md)
+- [데이터 흐름 & 상태 관리](./docs/data-flow.md)
+- [API 레퍼런스](./docs/api-reference.md)
+- [Storybook](https://imjeonmutoe.github.io/ai-component-library)
 
-### Develop
+## 기술 스택
 
-To develop all apps and packages, run the following command:
+| 분류 | 기술 |
+|------|------|
+| UI | React 19 + TypeScript 5 |
+| 상태관리 | Zustand v5 |
+| 스타일 | Tailwind CSS v3 |
+| 가상화 | @tanstack/react-virtual |
+| 테스트 | Vitest + RTL + MSW |
+| 문서화 | Storybook v8 |
+| 빌드 | tsup (ESM + CJS) |
+| CI/CD | GitHub Actions |
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## 라이선스
 
-```sh
-cd my-turborepo
-turbo dev
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+MIT
