@@ -9,6 +9,8 @@ interface AIChatProps {
   placeholder?: string;
   className?: string;
   title?: string;
+  maxRetries?: number;
+  timeout?: number;
 }
 
 function MessageBubble({ message }: { message: AIMessage }) {
@@ -16,6 +18,8 @@ function MessageBubble({ message }: { message: AIMessage }) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
+        role="article"
+        aria-label={`${isUser ? '사용자' : 'AI'} 메시지`}
         className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
           isUser
             ? 'bg-ai-primary text-white rounded-br-sm'
@@ -31,9 +35,17 @@ function MessageBubble({ message }: { message: AIMessage }) {
 function StreamingBubble({ content }: { content: string }) {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[80%] rounded-2xl rounded-bl-sm px-4 py-2 text-sm leading-relaxed bg-white border border-ai-border text-gray-800 shadow-sm">
+      <div
+        role="article"
+        aria-label="AI 응답 중"
+        aria-live="polite"
+        className="max-w-[80%] rounded-2xl rounded-bl-sm px-4 py-2 text-sm leading-relaxed bg-white border border-ai-border text-gray-800 shadow-sm"
+      >
         {content}
-        <span className="inline-block w-0.5 h-4 ml-0.5 bg-ai-primary align-text-bottom animate-cursor-blink" />
+        <span
+          aria-hidden="true"
+          className="inline-block w-0.5 h-4 ml-0.5 bg-ai-primary align-text-bottom animate-cursor-blink"
+        />
       </div>
     </div>
   );
@@ -41,11 +53,12 @@ function StreamingBubble({ content }: { content: string }) {
 
 function ThinkingIndicator() {
   return (
-    <div className="flex justify-start">
+    <div className="flex justify-start" role="status" aria-label="AI가 생각 중입니다">
       <div className="rounded-2xl rounded-bl-sm px-4 py-3 bg-white border border-ai-border shadow-sm flex gap-1 items-center">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
+            aria-hidden="true"
             className="w-1.5 h-1.5 rounded-full bg-ai-primary animate-dot-bounce"
             style={{ animationDelay: `${i * 0.2}s` }}
           />
@@ -60,9 +73,11 @@ export function AIChat({
   placeholder = '메시지를 입력하세요...',
   className = '',
   title = 'AI 어시스턴트',
+  maxRetries,
+  timeout,
 }: AIChatProps) {
   const { status, messages, currentChunk, error, send, clearMessages } =
-    useAIStream({ adapter });
+    useAIStream({ adapter, maxRetries, timeout });
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -96,14 +111,14 @@ export function AIChat({
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-ai-border bg-white">
         <div className="flex items-center gap-2">
-          <span className="text-lg">✦</span>
+          <span aria-hidden="true" className="text-lg">✦</span>
           <h2 className="font-semibold text-gray-800 text-sm">{title}</h2>
         </div>
         {messages.length > 0 && (
           <button
             onClick={clearMessages}
             className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="대화 초기화"
+            aria-label="대화 내용 초기화"
           >
             초기화
           </button>
@@ -111,10 +126,19 @@ export function AIChat({
       </header>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+      <div
+        role="log"
+        aria-label="채팅 메시지 목록"
+        aria-live="polite"
+        aria-busy={isLoading}
+        className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0"
+      >
         {messages.length === 0 && status === 'idle' && (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 py-12">
-            <span className="text-3xl mb-3">✦</span>
+          <div
+            aria-label="대화를 시작하세요"
+            className="flex flex-col items-center justify-center h-full text-center text-gray-400 py-12"
+          >
+            <span aria-hidden="true" className="text-3xl mb-3">✦</span>
             <p className="text-sm">무엇이든 물어보세요</p>
           </div>
         )}
@@ -129,20 +153,25 @@ export function AIChat({
         )}
 
         {error && (
-          <div className="text-center text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
+          <div role="alert" className="text-center text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
             오류가 발생했습니다: {error.message}
           </div>
         )}
 
-        <div ref={bottomRef} />
+        <div ref={bottomRef} aria-hidden="true" />
       </div>
 
       {/* Input */}
       <form
         onSubmit={handleSubmit}
+        aria-label="메시지 입력"
         className="border-t border-ai-border bg-white p-3 flex gap-2 items-end"
       >
+        <label htmlFor="ai-chat-input" className="sr-only">
+          메시지 입력
+        </label>
         <textarea
+          id="ai-chat-input"
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -150,11 +179,15 @@ export function AIChat({
           placeholder={placeholder}
           disabled={isLoading}
           rows={1}
+          aria-disabled={isLoading}
+          aria-describedby={error ? 'ai-chat-error' : undefined}
           className="flex-1 resize-none rounded-xl border border-ai-border px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ai-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         />
         <button
           type="submit"
           disabled={!input.trim() || isLoading}
+          aria-label={isLoading ? 'AI가 응답 중입니다' : '메시지 전송'}
+          aria-busy={isLoading}
           className="rounded-xl bg-ai-primary hover:bg-ai-primary-hover disabled:opacity-40 disabled:cursor-not-allowed text-white px-4 py-2 text-sm font-medium transition-colors shrink-0"
         >
           전송

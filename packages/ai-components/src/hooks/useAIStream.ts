@@ -1,9 +1,13 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useAIStore } from '../store/useAIStore';
 import type { AIAdapter, AIMessage, AIError } from '../types';
 
 interface UseAIStreamOptions {
   adapter: AIAdapter;
+  /** 실패 시 재시도 횟수 (기본값: 0) */
+  maxRetries?: number;
+  /** 스트리밍 타임아웃 (ms). 초과 시 TIMEOUT 에러 */
+  timeout?: number;
 }
 
 interface UseAIStreamReturn {
@@ -16,8 +20,19 @@ interface UseAIStreamReturn {
   clearMessages: () => void;
 }
 
-export function useAIStream({ adapter }: UseAIStreamOptions): UseAIStreamReturn {
+export function useAIStream({
+  adapter,
+  maxRetries = 0,
+  timeout,
+}: UseAIStreamOptions): UseAIStreamReturn {
   const store = useAIStore();
+
+  // 컴포넌트 언마운트 시 진행 중인 스트림 정리 (메모리 누수 방지)
+  useEffect(() => {
+    return () => {
+      adapter.abort();
+    };
+  }, [adapter]);
 
   const send = useCallback(
     async (content: string) => {
@@ -31,30 +46,56 @@ export function useAIStream({ adapter }: UseAIStreamOptions): UseAIStreamReturn 
       store.addMessage(userMessage);
       store.setStatus('thinking');
 
-      try {
-        const messages = [...useAIStore.getState().messages];
+      const messages = [...useAIStore.getState().messages];
 
-        store.setStatus('streaming');
+      const attempt = async (retriesLeft: number): Promise<void> => {
+        let timedOut = false;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-        for await (const chunk of adapter.stream(messages)) {
-          store.appendChunk(chunk);
+        try {
+          store.setStatus('streaming');
+          store.clearCurrentChunk();
+
+          if (timeout !== undefined) {
+            timeoutId = setTimeout(() => {
+              timedOut = true;
+              adapter.abort();
+            }, timeout);
+          }
+
+          for await (const chunk of adapter.stream(messages)) {
+            store.appendChunk(chunk);
+          }
+
+          store.commitStream();
+          store.setStatus('idle');
+        } catch (err) {
+          const isAbortError = err instanceof Error && err.name === 'AbortError';
+
+          // 재시도 가능한 에러 (abort/timeout 제외)
+          if (!isAbortError && retriesLeft > 0) {
+            await attempt(retriesLeft - 1);
+            return;
+          }
+
+          const code: AIError['code'] = timedOut
+            ? 'TIMEOUT'
+            : isAbortError
+              ? 'ABORTED'
+              : 'NETWORK';
+
+          store.setError({
+            code,
+            message: err instanceof Error ? err.message : 'Unknown error',
+          });
+        } finally {
+          clearTimeout(timeoutId);
         }
+      };
 
-        store.commitStream();
-        store.setStatus('idle');
-      } catch (err) {
-        const isAbort =
-          err instanceof Error && err.name === 'AbortError';
-
-        const aiError: AIError = {
-          code: isAbort ? 'ABORTED' : 'NETWORK',
-          message: err instanceof Error ? err.message : 'Unknown error',
-        };
-
-        store.setError(aiError);
-      }
+      await attempt(maxRetries);
     },
-    [adapter, store]
+    [adapter, store, maxRetries, timeout]
   );
 
   const abort = useCallback(() => {

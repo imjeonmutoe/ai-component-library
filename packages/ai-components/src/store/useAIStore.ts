@@ -12,6 +12,7 @@ interface AIState {
   setStatus: (status: AIStatus) => void;
   addMessage: (message: AIMessage) => void;
   appendChunk: (chunk: string) => void;
+  clearCurrentChunk: () => void;
   commitStream: () => void;
   setError: (error: AIError | null) => void;
   clearMessages: () => void;
@@ -33,9 +34,10 @@ export const useAIStore = create<AIState>()((set, get) => ({
   addMessage: (message) =>
     set((state) => ({ messages: [...state.messages, message] })),
 
-  // 스트리밍 중 청크 누적
   appendChunk: (chunk) =>
     set((state) => ({ currentChunk: state.currentChunk + chunk })),
+
+  clearCurrentChunk: () => set({ currentChunk: '' }),
 
   // 스트리밍 완료 → messages에 추가 후 currentChunk 초기화
   commitStream: () => {
@@ -51,7 +53,8 @@ export const useAIStore = create<AIState>()((set, get) => ({
     set({ messages: [...messages, message], currentChunk: '' });
   },
 
-  setError: (error) => set({ error, status: 'error' }),
+  // 에러 시 부분 수신된 chunk도 함께 정리
+  setError: (error) => set({ error, status: 'error', currentChunk: '' }),
 
   clearMessages: () => set({ messages: [], currentChunk: '' }),
 

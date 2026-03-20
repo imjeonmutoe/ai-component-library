@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { server } from '../../test/mocks/server';
-import { streamHandler, errorHandler, networkErrorHandler } from '../../test/mocks/handlers';
+import {
+  streamHandler,
+  errorHandler,
+  networkErrorHandler,
+  failThenSucceedHandler,
+} from '../../test/mocks/handlers';
 import { useAIStream } from '../useAIStream';
 import { useAIStore } from '../../store/useAIStore';
 
-// fetch 기반 SSE 어댑터 (테스트용)
 const createFetchAdapter = () => {
   let controller: AbortController | null = null;
 
@@ -158,5 +162,67 @@ describe('useAIStream', () => {
     });
 
     expect(result.current.messages).toHaveLength(0);
+  });
+
+  it('언마운트 시 adapter.abort()를 호출한다', () => {
+    const adapter = createFetchAdapter();
+    const abortSpy = vi.spyOn(adapter, 'abort');
+
+    const { unmount } = renderHook(() => useAIStream({ adapter }));
+    unmount();
+
+    expect(abortSpy).toHaveBeenCalled();
+  });
+
+  it('maxRetries 설정 시 실패 후 재시도하여 성공한다', async () => {
+    server.use(failThenSucceedHandler(1, ['재시도', '성공']));
+    const adapter = createFetchAdapter();
+    const { result } = renderHook(() => useAIStream({ adapter, maxRetries: 1 }));
+
+    await act(async () => {
+      await result.current.send('안녕?');
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('idle');
+    });
+
+    const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+    expect(assistantMsg?.content).toBe('재시도성공');
+  });
+
+  it('timeout 초과 시 TIMEOUT 에러가 발생한다', async () => {
+    let abortController: AbortController | null = null;
+    const slowAdapter = {
+      async *stream() {
+        abortController = new AbortController();
+        yield '첫번째청크';
+        // abort 신호를 받을 때까지 대기
+        await new Promise<void>((_, reject) => {
+          abortController!.signal.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      },
+      abort() {
+        abortController?.abort();
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useAIStream({ adapter: slowAdapter, timeout: 50 })
+    );
+
+    await act(async () => {
+      await result.current.send('안녕?').catch(() => {});
+    });
+
+    await waitFor(
+      () => {
+        expect(result.current.status).toBe('error');
+        expect(result.current.error?.code).toBe('TIMEOUT');
+      },
+      { timeout: 1000 }
+    );
   });
 });

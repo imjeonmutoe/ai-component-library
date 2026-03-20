@@ -1,6 +1,5 @@
 import { http, HttpResponse } from 'msw';
 
-// SSE 스트리밍 응답 생성 헬퍼
 const streamResponse = (chunks: string[]) => {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -24,13 +23,11 @@ const streamResponse = (chunks: string[]) => {
 };
 
 export const handlers = [
-  // 정상 스트리밍
   http.post('/api/stream', () =>
     streamResponse(['안녕', '하세요', '!'])
   ),
 ];
 
-// 테스트에서 개별적으로 사용할 핸들러 팩토리
 export const streamHandler = (chunks: string[]) =>
   http.post('/api/stream', () => streamResponse(chunks));
 
@@ -41,3 +38,15 @@ export const errorHandler = () =>
 
 export const networkErrorHandler = () =>
   http.post('/api/stream', () => HttpResponse.error());
+
+/** N번 실패 후 성공하는 핸들러 (retry 테스트용) */
+export const failThenSucceedHandler = (failTimes: number, successChunks: string[]) => {
+  let callCount = 0;
+  return http.post('/api/stream', () => {
+    callCount++;
+    if (callCount <= failTimes) {
+      return HttpResponse.json({ error: 'Server Error' }, { status: 500 });
+    }
+    return streamResponse(successChunks);
+  });
+};
