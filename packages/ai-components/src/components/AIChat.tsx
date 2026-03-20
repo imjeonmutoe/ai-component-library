@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, type FormEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, type FormEvent } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import type { AIAdapter, AIMessage } from '../types';
 import { useAIStream } from '../hooks/useAIStream';
 
@@ -12,6 +13,12 @@ interface AIChatProps {
   maxRetries?: number;
   timeout?: number;
 }
+
+type VirtualItem =
+  | { kind: 'message'; message: AIMessage }
+  | { kind: 'thinking' }
+  | { kind: 'streaming'; content: string }
+  | { kind: 'error'; message: string };
 
 function MessageBubble({ message }: { message: AIMessage }) {
   const isUser = message.role === 'user';
@@ -68,6 +75,23 @@ function ThinkingIndicator() {
   );
 }
 
+function renderVirtualItem(item: VirtualItem) {
+  switch (item.kind) {
+    case 'message':
+      return <MessageBubble message={item.message} />;
+    case 'thinking':
+      return <ThinkingIndicator />;
+    case 'streaming':
+      return <StreamingBubble content={item.content} />;
+    case 'error':
+      return (
+        <div role="alert" className="text-center text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
+          오류가 발생했습니다: {item.message}
+        </div>
+      );
+  }
+}
+
 export function AIChat({
   adapter,
   placeholder = '메시지를 입력하세요...',
@@ -79,14 +103,32 @@ export function AIChat({
   const { status, messages, currentChunk, error, send, clearMessages } =
     useAIStream({ adapter, maxRetries, timeout });
   const [input, setInput] = useState('');
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isLoading = status === 'thinking' || status === 'streaming';
 
+  const virtualItems = useMemo<VirtualItem[]>(() => {
+    const items: VirtualItem[] = messages.map((message) => ({ kind: 'message', message }));
+    if (status === 'thinking') items.push({ kind: 'thinking' });
+    if (status === 'streaming' && currentChunk) items.push({ kind: 'streaming', content: currentChunk });
+    if (error) items.push({ kind: 'error', message: error.message });
+    return items;
+  }, [messages, status, currentChunk, error]);
+
+  const virtualizer = useVirtualizer({
+    count: virtualItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 60,
+    overscan: 5,
+  });
+
+  // Auto-scroll to bottom on new items
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentChunk, status]);
+    if (virtualItems.length > 0) {
+      virtualizer.scrollToIndex(virtualItems.length - 1, { behavior: 'smooth' });
+    }
+  }, [virtualItems.length, virtualizer]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -127,13 +169,14 @@ export function AIChat({
 
       {/* Messages */}
       <div
+        ref={scrollRef}
         role="log"
         aria-label="채팅 메시지 목록"
         aria-live="polite"
         aria-busy={isLoading}
-        className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0"
+        className="flex-1 overflow-y-auto min-h-0"
       >
-        {messages.length === 0 && status === 'idle' && (
+        {virtualItems.length === 0 && status === 'idle' ? (
           <div
             aria-label="대화를 시작하세요"
             className="flex flex-col items-center justify-center h-full text-center text-gray-400 py-12"
@@ -141,24 +184,34 @@ export function AIChat({
             <span aria-hidden="true" className="text-3xl mb-3">✦</span>
             <p className="text-sm">무엇이든 물어보세요</p>
           </div>
-        )}
-
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
-
-        {status === 'thinking' && <ThinkingIndicator />}
-        {status === 'streaming' && currentChunk && (
-          <StreamingBubble content={currentChunk} />
-        )}
-
-        {error && (
-          <div role="alert" className="text-center text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">
-            오류가 발생했습니다: {error.message}
+        ) : (
+          <div
+            style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
+            className="p-4"
+          >
+            {virtualizer.getVirtualItems().map((vItem) => {
+              const item = virtualItems[vItem.index];
+              if (!item) return null;
+              return (
+                <div
+                  key={vItem.key}
+                  data-index={vItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    transform: `translateY(${vItem.start}px)`,
+                    padding: '6px 0',
+                  }}
+                >
+                  {renderVirtualItem(item)}
+                </div>
+              );
+            })}
           </div>
         )}
-
-        <div ref={bottomRef} aria-hidden="true" />
       </div>
 
       {/* Input */}
