@@ -11,6 +11,23 @@
       "types": "./dist/index.d.ts"
     }
   },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "react",
+    "ai",
+    "streaming",
+    "components",
+    "chat",
+    "sse"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imjeonmutoe/ai-component-library.git",
+    "directory": "packages/ai-components"
+  },
+  "license": "MIT",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
